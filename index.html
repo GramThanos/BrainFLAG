@@ -101,7 +101,10 @@
 					</p>
 				</div>
 				<div class="col-12" style="padding-bottom: 25px;">
-					<small>Created by <a href="https://github.com/GramThanos/">GramThanos</a> for Helenic ECSC Team.</small>
+					<small>
+						Created by <a href="https://github.com/GramThanos/">GramThanos</a> for <a href="https://github.com/ECSCTeamGreece">Hellenic Cyber Security Team</a>.<br>
+						View source at <a href="https://github.com/GramThanos/BrainFLAG">GitHub</a>.
+					</small>
 				</div>
 			</div>
 		</div>
@@ -660,10 +663,12 @@
 			// Load old instructions
 			(() => {
 				let instructions = localStorage.getItem('brainflag');
-				if (instructions) elements.instructions.value = instructions;
-				reset();
-				CPU.loadProgram(instructions);
-				monitorStatus();
+				if (instructions) {
+					elements.instructions.value = instructions;
+					reset();
+					CPU.loadProgram(instructions);
+					monitorStatus();
+				}
 			})();
 
 		</script>
