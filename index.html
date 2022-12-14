@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>BrainFLAG</title>
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/GramThanos/jsNotify.js/source/jsNotify.css">
+		<style type="text/css">
+			textarea {
+				font-family: monospace;
+			}
+
+			.jsNotify-section {
+				position: fixed;
+			}
+		</style>
+	</head>
+	<body>
+		<nav class="navbar navbar-expand-lg bg-light">
+			<div class="container">
+				<a class="navbar-brand" href="#">BrainFLAG</a>
+				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+				<div class="collapse navbar-collapse" id="navbarSupportedContent">
+					<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+						<li class="nav-item">
+							<small>Sniffing flags inside the BrainFuck</small>
+						</li>
+					</ul>
+				</div>
+			</div>
+		</nav>
+
+		<div class="container">
+			<div class="row">
+				<div class="col-12 py-2">
+					<span id="status" style="float:right;">idle</span>
+					<button id="loadButton" type="button" class="btn btn-outline-primary btn-sm">Load Program</button>
+					<button id="executeButton" type="button" class="btn btn-outline-primary btn-sm">Execute</button>
+					<button id="singleStepButton" type="button" class="btn btn-outline-secondary btn-sm">1 Step</button>
+					<button id="n10StepsButton" type="button" class="btn btn-outline-secondary btn-sm">10 Steps</button>
+					<button id="n100StepsButton" type="button" class="btn btn-outline-secondary btn-sm">100 Steps</button>
+					<button id="n1000StepsButton" type="button" class="btn btn-outline-secondary btn-sm">1000 Steps</button>
+					<button id="singleStepBackButton" type="button" class="btn btn-outline-secondary btn-sm">-1 Step</button>
+					<button id="resetButton" type="button" class="btn btn-outline-danger btn-sm">Reset</button>
+				</div>
+				<div class="col-12">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="your code here" id="instructionsTextArea" style="height: 250px;"></textarea>
+						<label for="instructionsTextArea">BrainFuck Instructions</label>
+					</div>
+				</div>
+				<div class="col-12">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="your input here" id="inputTextArea" style="height: 100px"></textarea>
+						<label for="inputTextArea">Input in hex</label>
+					</div>
+				</div>
+				<div class="col-8">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="the output in hex" id="outputHexTextArea" style="height: 250px" readonly></textarea>
+						<label for="outputHexTextArea">Output Hex</label>
+					</div>
+				</div>
+				<div class="col-4">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="the output in ASCII" id="outputAsciiTextArea" style="height: 250px" readonly></textarea>
+						<label for="outputAsciiTextArea">Output ASCII</label>
+					</div>
+				</div>
+				<div class="col-8">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="the CPU stack in hex" id="stackHexTextArea" style="height: 250px" readonly></textarea>
+						<label for="stackHexTextArea">CPU Stack hex</label>
+					</div>
+				</div>
+				<div class="col-4">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="the CPU stack in ASCII" id="stackAsciiTextArea" style="height: 250px" readonly></textarea>
+						<label for="stackAsciiTextArea">CPU Stack ASCII</label>
+					</div>
+				</div>
+				<div class="col-12">
+					<div class="form-floating" style="margin-bottom: 25px;">
+						<textarea class="form-control" placeholder="the flags uncovered" id="flagsTextArea" style="height: 250px" readonly></textarea>
+						<label for="flagsTextArea">Flags Sniffed</label>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="container">
+			<div class="row">
+				<div class="col-12">
+					<p>
+						IP: Instruction Pointer<br>
+						SP: Stack/Data Pointer<br>
+						Note: Breakpoints can be added using the * or the # characters.
+					</p>
+				</div>
+				<div class="col-12" style="padding-bottom: 25px;">
+					<small>Created by <a href="https://github.com/GramThanos/">GramThanos</a> for Helenic ECSC Team.</small>
+				</div>
+			</div>
+		</div>
+
+
+
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/gh/GramThanos/jsNotify.js/source/sAnim.js"></script>
+		<script src="https://cdn.jsdelivr.net/gh/GramThanos/jsNotify.js/source/jsNotify.js"></script>
+		
+		<script type="text/javascript">
+			// Just a small BrainFuck CPU
+			// by GramThanos
+
+			class BrainFuckCPU {
+				constructor() {
+					this.ignore_unknown_chars = true;
+					this.cycles_limit = 1_000_000;
+					this.instructions = [];
+					this.reset();
+
+					this.onOutput((data) => {
+						console.log(data);
+						//String.fromCharCode(data);
+					});
+					this.onInput((data) => {
+						let byte = parseInt(prompt('Add a byte of input in hex format', '0x0'), 16);
+						if (isNaN(byte)) {
+							this.handleError(0x0, `Invalid input provided.`);
+						}
+						return byte;
+					});
+				}
+
+				reset() {
+					this.stack = [0x0];
+					this.sp = 0;
+					this.ip = 0;
+					this.cycle = 0;
+					this.breakpoint = false;
+				}
+
+				onOutput(func) {
+					this._handler_output = func;
+				}
+				onInput(func) {
+					this._handler_input = func;
+				}
+
+				loadProgram(program, append = false) {
+					if (!append) {
+						this.instructions = [];
+						this.reset();
+					}
+					[... program.replace(/\s+/g,'')].forEach(istruction => {
+						this.instructions.push(istruction);
+					});
+				}
+
+				step(number = 1) {
+					this.breakpoint = false;
+					for (let i = number - 1; i >= 0 && this.ip < this.instructions.length && !this.breakpoint; i--) {
+						this.executeCycle();
+					}
+				}
+
+				execute() {
+					let limit = this.cycles_limit;
+					this.breakpoint = false;
+					while (this.ip < this.instructions.length && !this.breakpoint) {
+						this.executeCycle();
+						limit--;
+						if (limit < 0) {
+							this.handleError(0x0, `Execution cycles ${this.cycles_limit} limit reached. You can increase it by updating the "cycles_limit" attribute.`);
+							break;
+						}
+					}
+				}
+
+				hasInstructions() {
+					if (this.ip >= this.instructions.length) {
+						return false;
+					}
+					return true;
+				}
+
+				executeCycle() {
+					if (this.ip >= this.instructions.length) {
+						this.handleError(0x0, `${this.ip.toString(16)} is outside the instructions region`);
+					}
+					this.cycle ++;
+
+					let instruction = this.instructions[this.ip];
+					switch(instruction) {
+
+						// Increment the data pointer (to point to the next cell to the right).
+						case '>':
+							this.sp++;
+							if (this.sp >= this.stack.length) {
+								this.stack.push(0x0);
+							}
+							break;
+
+						// Decrement the data pointer (to point to the next cell to the left).
+						case '<':
+							this.sp--;
+							if (this.sp < 0) {
+								this.handleError(0x0, `Failed to decrease data pointer.`);
+							}
+							break;
+
+						// Increment (increase by one) the byte at the data pointer.
+						case '+':
+							this.stack[this.sp] = ((this.stack[this.sp] + 1) & 0xff);
+							break;
+
+						// Decrement (decrease by one) the byte at the data pointer.
+						case '-':
+							this.stack[this.sp] = ((this.stack[this.sp] - 1) & 0xff);
+							break;
+
+						// Output the byte at the data pointer.
+						case '.':
+							this._handler_output(this.stack[this.sp]);
+							break;
+
+						// Accept one byte of input, storing its value in the byte at the data pointer.
+						case ',':
+							let byte = this._handler_input();
+							this.stack[this.sp] = byte & 0xff;
+							break;
+
+						// If the byte at the data pointer is zero, then instead of moving the instruction pointer forward to the next command, jump it forward to the command after the matching ] command.
+						case '[':
+							if (this.stack[this.sp] == 0x0) {
+								let depth = 0;
+								
+								do {
+									this.ip++
+									if (this.ip >= this.instructions.length) {
+										this.handleError(0x0, `${this.ip.toString(16)} is outside the instructions region`);
+										return;
+									}
+									switch(this.instructions[this.ip]) {
+										case '[':
+											depth++;
+											break;
+										case ']':
+											depth--;
+											break;
+									}
+								} while (depth > -1);
+								this.ip++
+							}
+							break;
+
+						// If the byte at the data pointer is nonzero, then instead of moving the instruction pointer forward to the next command, jump it back to the command after the matching [ command.
+						case ']':
+							if (this.stack[this.sp] != 0x0) {
+								let depth = 0;
+								
+								do {
+									this.ip--
+									if (this.ip < 0) {
+										this.handleError(0x0, `${this.ip.toString(16)} is outside the instructions region`);
+										return; // fatal
+									}
+									switch(this.instructions[this.ip]) {
+										case '[':
+											depth--;
+											break;
+										case ']':
+											depth++;
+											break;
+									}
+								} while (depth > -1);
+							}
+							break;
+
+						//// Nop instruction (white chars)
+						//case ' ':
+						//case '\n':
+						//case '\r':
+						//case '\t':
+						//	break;
+
+						// Break point
+						case '*':
+						case '#':
+							this.breakpoint = true;
+							break;
+
+						// Invaid instruction
+						default:
+							if (!this.ignore_unknown_chars) {
+								this.handleError(0x0, `Unknown instruction "${instruction}"`);
+							}
+							break;
+					}
+					this.ip++;
+				}
+
+				reverseCycle() {
+					this.ip --;
+
+					if (this.ip < 0) {
+						this.handleError(0x0, `${this.ip.toString(16)} is outside the instructions region`);
+					}
+					this.cycle --;
+
+					let instruction = this.instructions[this.ip];
+					switch(instruction) {
+
+						// Increment the data pointer (to point to the next cell to the right).
+						case '>':
+							if (this.sp == this.stack.length -1 && this.stack[this.sp] == 0x0) {
+								this.stack.pop();
+							}
+							this.sp--;
+							if (this.sp < 0) {
+								this.handleError(0x0, `Failed to reverse increment of the data pointer.`);
+							}
+							break;
+
+						// Decrement the data pointer (to point to the next cell to the left).
+						case '<':
+							this.sp++;
+							if (this.sp >= this.stack.length) {
+								this.handleError(0x0, `Failed to reverse decrement of the data pointer.`);
+							}
+							break;
+
+						// Increment (increase by one) the byte at the data pointer.
+						case '+':
+							this.stack[this.sp] = ((this.stack[this.sp] - 1) & 0xff);
+							break;
+
+						// Decrement (decrease by one) the byte at the data pointer.
+						case '-':
+							this.stack[this.sp] = ((this.stack[this.sp] + 1) & 0xff);
+							break;
+
+						// Output the byte at the data pointer.
+						case '.':
+							this._handler_output(this.stack[this.sp]);
+							break;
+
+						// Accept one byte of input, storing its value in the byte at the data pointer.
+						case ',':
+							let byte = this.stack[this.sp];
+							this._handler_output(byte);
+							// Assume that the value in the stack was zero
+							this.stack[this.sp] = 0x00;
+							break;
+
+						// If the byte at the data pointer is zero, then instead of moving the instruction pointer forward to the next command, jump it forward to the command after the matching ] command.
+						case '[':
+							this.ip ++;
+							this.cycle ++;
+							this.handleError(0x0, `Can not reverse jump start instruction.`);
+							break;
+
+						// If the byte at the data pointer is nonzero, then instead of moving the instruction pointer forward to the next command, jump it back to the command after the matching [ command.
+						case ']':
+							this.ip ++;
+							this.cycle ++;
+							this.handleError(0x0, `Can not reverse jump end instruction.`);
+							break;
+
+						//// Nop instruction (white chars)
+						//case ' ':
+						//case '\n':
+						//case '\r':
+						//case '\t':
+						//	break;
+
+						// Break point
+						case '*':
+						case '#':
+							this.breakpoint = true;
+							break;
+
+						// Invaid instruction
+						default:
+							if (!this.ignore_unknown_chars) {
+								this.handleError(0x0, `Failed to reverse unknown instruction "${instruction}"`);
+							}
+							break;
+					}
+				}
+
+				printState() {
+					console.log(
+						'Inst : ' + this.instructions.join(' ') + '\n' +
+						'*      ' + ((n) => {return '^'.padStart(n + 1, ' ')})(this.ip * 2) + '\n' +
+						'Data : ' + this.stack.map(x => '' + x.toString(16).padStart(2, '0')).join(' ') + '\n' +
+						'*      ' + ((n) => {return '^^'.padStart(n + 2, ' ')})(this.sp * 3) + '\n' +
+						''
+					);
+				}
+
+				printStack() {
+					console.log(this.stack.map(x => String.fromCharCode(x)).join(''));
+				}
+
+				handleError(code, message) {
+					throw new Error(`[${code}]: ${message}`);
+				}
+			}
+		</script>
+
+
+		<script type="text/javascript">
+			const State = {
+				flags : [],
+				posible_flag : '',
+				flag_regex : /[A-Za-z0-9]+{[a-zA-Z0-9_\-!@#\$%\^&\*\+=]+}/g,
+
+				input_index : 0,
+				output_chars_per_line : 16,
+
+				output_hex_buffer : [],
+				output_ascii_buffer : [],
+
+			};
+
+			const elements = {
+				instructions : document.getElementById('instructionsTextArea'),
+				input : document.getElementById('inputTextArea'),
+				output_hex : document.getElementById('outputHexTextArea'),
+				output_ascii : document.getElementById('outputAsciiTextArea'),
+				status : document.getElementById('status'),
+				flags : document.getElementById('flagsTextArea'),
+				stack_hex : document.getElementById('stackHexTextArea'),
+				stack_ascii : document.getElementById('stackAsciiTextArea'),
+
+				load : document.getElementById('loadButton'),
+				execute : document.getElementById('executeButton'),
+				single_step : document.getElementById('singleStepButton'),
+				n10_step : document.getElementById('n10StepsButton'),
+				n100_step : document.getElementById('n100StepsButton'),
+				n1000_step : document.getElementById('n1000StepsButton'),
+				single_step_back : document.getElementById('singleStepBackButton'),
+				reset : document.getElementById('resetButton'),
+			};
+
+			const CPU = new BrainFuckCPU();
+
+			let parseByteToDisplayASCII = function(byte) {
+				if (32 <= byte && byte <= 126) {
+					return String.fromCharCode(byte);
+				}
+				else {
+					return '·';
+				}
+			}
+
+			CPU.onOutput((data) => {
+				State.output_hex_buffer.push(data.toString(16).padStart(2, '0'));
+				State.output_ascii_buffer.push(parseByteToDisplayASCII(data));
+
+				let output_hex = '';
+				let output_ascii = '';
+				let output_str = '';
+				for (let j = 0; j < State.output_hex_buffer.length; j++) {
+					let i = j % State.output_chars_per_line;
+					if (i != 0) {
+						output_hex += ' ';
+						//output_ascii += ' ';
+					}
+					else {
+						output_hex += '\n';
+						output_ascii += '\n';
+					}
+					output_hex += State.output_hex_buffer[j];
+					output_ascii += State.output_ascii_buffer[j];
+				}
+
+				elements.output_hex.value = output_hex;
+				elements.output_ascii.value = output_ascii;
+				search4flags(State.output_ascii_buffer.join(''));
+			});
+			CPU.onInput(() => {
+				let hex = elements.input.value.replace(/ /g, '').replace(/ /g, '');
+				let bytes = [];
+				for (let c = 0; c < hex.length; c += 2)
+					bytes.push(parseInt(hex.substr(c, 2), 16));
+
+				if (State.input_index >= bytes.length) {
+					let byte = parseInt(prompt('Add a byte of input in hex format', '0x0'), 16);
+					if (isNaN(byte)) {
+						console.log('Invalid input provided.');
+						return 0x0;
+					}
+					return byte;
+				}
+
+				let byte = bytes[State.input_index];
+				State.input_index++;
+				return byte;
+			});
+
+			let search4flags = function(data) {
+				// Search for a flag
+				let search_flags = data.match(State.flag_regex);
+				// If a flag was found
+				if (search_flags) {
+					let found = 0;
+					search_flags.forEach(flag => {
+						if (!State.flags.includes(flag)) {
+							found++;
+							// Add found flag on the list
+							State.flags.push(flag);
+						}
+					});
+					if (found > 0) {
+						// Sort by biggest in length
+						State.flags.sort((a, b) => b.length - a.length);
+					}
+				}
+			};
+
+			let showStack = function() {
+				let stack_hex = '';
+				let stack_ascii = '';
+				for (let j = 0; j < CPU.stack.length; j++) {
+					let i = j % State.output_chars_per_line;
+					if (i != 0) {
+						stack_hex += ' ';
+						//stack_ascii += '';
+					}
+					else {
+						stack_hex += '\n';
+						stack_ascii += '\n';
+					}
+
+					stack_hex += CPU.stack[j].toString(16).padStart(2, '0');
+					stack_ascii += parseByteToDisplayASCII(CPU.stack[j]);
+				}
+
+				elements.stack_hex.value = stack_hex;
+				elements.stack_ascii.value = stack_ascii;
+			};
+
+			let monitorStatus = function(light = false) {
+				elements.status.textContent = `IP: ${CPU.ip}, SP: ${CPU.sp}, Cycle: ${CPU.cycle}, Flags: ${State.flags.length}`;
+
+				// Parse CPU stack
+				let stack = CPU.stack.map(x => String.fromCharCode(x)).join('');
+				search4flags(stack);
+
+				if (!light) {
+					// Show flags
+					let flags = '';
+					for (let i = 0; i < State.flags.length; i++) {
+						flags += State.flags[i] + '\n';
+					}
+					elements.flags.value = flags;
+
+					// Show stack
+					showStack();
+				}
+			};
+
+			let reset = function() {
+				CPU.reset();
+				State.flags = [];
+				State.output_hex_buffer = [];
+				State.output_ascii_buffer = [];
+				elements.output_hex.value = '';
+				elements.output_ascii.value = '';
+				State.input_index = 0;
+			};
+
+			elements.load.addEventListener('click', () => {
+				localStorage.setItem('brainflag', elements.instructions.value);
+				reset();
+				CPU.loadProgram(elements.instructions.value);
+				monitorStatus();
+				jsNotify('Program loaded into memory.', 'green', {time2live : 2*1000});
+			}, false);
+			elements.execute.addEventListener('click', () => {
+				let limit = CPU.cycles_limit;
+				let cycles = 0;
+				CPU.breakpoint = false;
+				while(CPU.hasInstructions() && !CPU.breakpoint) {
+					CPU.executeCycle();
+					monitorStatus(true);
+					cycles++;
+					limit--;
+					if (limit < 0) break;
+				}
+				monitorStatus();
+				if (limit < 0) {
+					jsNotify(`Execution cycles limit reached. Execution was paused.`, 'red', {time2live : 5*1000});
+				}
+				else if (CPU.breakpoint) {
+					jsNotify(`Execution stopped at breakpoint.`, 'yellow', {time2live : 5*1000});
+				}
+				else {
+					if (cycles > 0) {
+						jsNotify(`Program was executed in ${CPU.cycle} cycles.`, 'green', {time2live : 2.5*1000});
+					}
+					else {
+						jsNotify(`Nothing to execute. Try to reset the CPU.`, 'yellow', {time2live : 5*1000});
+					}
+				}
+
+				if (State.flags.length > 0 && State.flags[0] != State.posible_flag) {
+					State.posible_flag = State.flags[0];
+					jsNotify(`Posible flag found ${State.posible_flag}`, 'blue', {time2live : 10*1000});
+				}
+			}, false);
+			elements.single_step.addEventListener('click', () => {
+				CPU.executeCycle();
+				monitorStatus();
+			}, false);
+			elements.n10_step.addEventListener('click', () => {
+				let n = 10;
+				for (let i = n - 1; i >= 0; i--) {
+					CPU.executeCycle();
+					monitorStatus(true);
+				}
+				monitorStatus();
+			}, false);
+			elements.n100_step.addEventListener('click', () => {
+				let n = 100;
+				for (let i = n - 1; i >= 0; i--) {
+					CPU.executeCycle();
+					monitorStatus(true);
+				}
+				monitorStatus();
+			}, false);
+			elements.n1000_step.addEventListener('click', () => {
+				let n = 1000;
+				for (let i = n - 1; i >= 0; i--) {
+					CPU.executeCycle();
+					monitorStatus(true);
+				}
+				monitorStatus();
+			}, false);
+			elements.single_step_back.addEventListener('click', () => {
+				CPU.reverseCycle();
+				monitorStatus();
+			}, false);
+			elements.reset.addEventListener('click', () => {
+				reset();
+				monitorStatus();
+				jsNotify('CPU reset completed.', 'green', {time2live : 2*1000});
+			}, false);
+
+			window.addEventListener('error', (err) => {
+				jsNotify(err.error.message, 'red', {time2live : 5*1000});
+			}, false);
+
+			// Load old instructions
+			(() => {
+				let instructions = localStorage.getItem('brainflag');
+				if (instructions) elements.instructions.value = instructions;
+				reset();
+				CPU.loadProgram(instructions);
+				monitorStatus();
+			})();
+
+		</script>
+	</body>
+</html>
