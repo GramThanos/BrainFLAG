@@ -36,7 +36,11 @@
 		<div class="container">
 			<div class="row">
 				<div class="col-12 py-2">
-					<span id="status" style="float:right;">idle</span>
+					<!-- Button trigger modal -->
+					<button type="button" class="btn btn-outline-primary btn-sm" style="float:right;" data-bs-toggle="modal" data-bs-target="#CPUModal">
+						State
+					</button>
+					<span id="status" style="float:right;margin-right:10px;line-height:30px;">idle</span>
 					<button id="loadButton" type="button" class="btn btn-outline-primary btn-sm">Load Program</button>
 					<button id="executeButton" type="button" class="btn btn-outline-primary btn-sm">Execute</button>
 					<button id="singleStepButton" type="button" class="btn btn-outline-secondary btn-sm">1 Step</button>
@@ -108,6 +112,39 @@
 			</div>
 		</div>
 
+		<!-- Modal -->
+		<div class="modal fade" id="CPUModal" tabindex="-1" aria-labelledby="CPUModalLabel" aria-hidden="true">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h1 class="modal-title fs-5" id="CPUModalLabel">Edit CPU state</h1>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+						<div class="mb-3">
+							<label for="state-stack-data-input" class="form-label">Stack Data</label>
+							<input type="text" class="form-control" placeholder="Stack Data" aria-label="Stack Data" id="state-stack-data-input">
+							<div class="form-text">(HEX bytes with space between)</div>
+						</div>
+						<div class="mb-3">
+							<label for="state-stack-pointer-input" class="form-label">Stack Pointer</label>
+							<input type="number" class="form-control" placeholder="Stack Pointer" aria-label="Stack Pointer" id="state-stack-pointer-input">
+							<div class="form-text">(decimal value starting from 0)</div>
+						</div>
+						<div class="mb-3">
+							<label for="state-instruction-pointer-input" class="form-label">Instruction Pointer</label>
+							<input type="number" class="form-control" placeholder="Instruction Pointer" aria-label="Instruction Pointer" id="state-instruction-pointer-input">
+							<div class="form-text">(decimal value starting from 0)</div>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+						<button type="button" class="btn btn-success" id="apply-state-edit">Apply</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
 
 
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
@@ -123,17 +160,18 @@
 					this.ignore_unknown_chars = true;
 					this.cycles_limit = 1_000_000;
 					this.instructions = [];
+					this._input_buffer = [];
 					this.reset();
 
-					this.onOutput((data) => {
+					this.onOutput((data, wasInput = false) => {
 						console.log(data);
-						//String.fromCharCode(data);
 					});
-					this.onInput((data) => {
-						let byte = parseInt(prompt('Add a byte of input in hex format', '0x0'), 16);
-						if (isNaN(byte)) {
-							this.handleError(0x0, `Invalid input provided.`);
+					this.onInput(() => {
+						if (this._input_buffer_index >= this._input_buffer.length) {
+							return 0x0;
 						}
+						let byte = this._input_buffer[this._input_buffer_index];
+						this._input_buffer_index++;
 						return byte;
 					});
 				}
@@ -144,6 +182,7 @@
 					this.ip = 0;
 					this.cycle = 0;
 					this.breakpoint = false;
+					this._input_buffer_index = 0;
 				}
 
 				onOutput(func) {
@@ -151,6 +190,42 @@
 				}
 				onInput(func) {
 					this._handler_input = func;
+				}
+
+				setInput(data) {
+					this._input_buffer = [];
+					this._input_buffer_index = 0;
+					[... data].forEach(byte => {
+						if (typeof byte == 'string')
+							this._input_buffer.push(byte.charCodeAt(0));
+						else if (typeof byte == 'number')
+							this._input_buffer.push(byte);
+						else {
+							this.handleError('Unknown input typeof');
+						}
+					});
+				}
+
+				setStack(data, pointer=null) {
+					if (pointer == null) {
+						pointer = data.length - 1;
+					}
+					this.sp = pointer;
+					this.stack = [];
+					data.forEach(x => {
+						this.stack.push(x);
+					});
+				}
+				setInstructions(data, pointer=null) {
+					data = [... data.replace(/\s+/g,'')];
+					if (pointer == null) {
+						pointer = data.length;
+					}
+					this.ip = pointer;
+					this.instructions = [];
+					data.forEach(x => {
+						this.instructions.push(x);
+					});
 				}
 
 				loadProgram(program, append = false) {
@@ -183,6 +258,19 @@
 					}
 				}
 
+				reverse() {
+					let limit = this.cycles_limit;
+					this.breakpoint = false;
+					while (this.ip > 0 && !this.breakpoint) {
+						this.reverseCycle();
+						limit--;
+						if (limit < 0) {
+							this.handleError(0x0, `Reverse cycles ${this.cycles_limit} limit reached. You can increase it by updating the "cycles_limit" attribute.`);
+							break;
+						}
+					}
+				}
+
 				hasInstructions() {
 					if (this.ip >= this.instructions.length) {
 						return false;
@@ -191,6 +279,7 @@
 				}
 
 				executeCycle() {
+
 					if (this.ip >= this.instructions.length) {
 						this.handleError(0x0, `${this.ip.toString(16)} is outside the instructions region`);
 					}
@@ -306,6 +395,17 @@
 					this.ip++;
 				}
 
+				canReverse() {
+					if (this.ip <= 0) {
+						return false;
+					}
+					let inst = this.instructions[this.ip - 1];
+					if (inst == '[' || inst == ']') {
+						return false;
+					}
+					return true;
+				}
+
 				reverseCycle() {
 					this.ip --;
 
@@ -331,8 +431,11 @@
 						// Decrement the data pointer (to point to the next cell to the left).
 						case '<':
 							this.sp++;
-							if (this.sp >= this.stack.length) {
+							if (this.sp > this.stack.length) {
 								this.handleError(0x0, `Failed to reverse decrement of the data pointer.`);
+							}
+							if (this.sp == this.stack.length) {
+								this.stack.push(0x0);
 							}
 							break;
 
@@ -354,7 +457,7 @@
 						// Accept one byte of input, storing its value in the byte at the data pointer.
 						case ',':
 							let byte = this.stack[this.sp];
-							this._handler_output(byte);
+							this._handler_output(byte, true);
 							// Assume that the value in the stack was zero
 							this.stack[this.sp] = 0x00;
 							break;
@@ -670,6 +773,48 @@
 				}
 			})();
 
+			// Handle modal to edit CPU state
+			const state_edit = {
+				elements : {
+					modal : document.getElementById('CPUModal'),
+					stack : document.getElementById('state-stack-data-input'),
+					sp : document.getElementById('state-stack-pointer-input'),
+					ip : document.getElementById('state-instruction-pointer-input'),
+					apply : document.getElementById('apply-state-edit')
+				},
+
+				populate : function() {
+					this.elements.stack.value = CPU.stack.map(x => x.toString(16).padStart(2, '0')).join(' ');
+					this.elements.sp.value = CPU.sp;
+					this.elements.ip.value = CPU.ip;
+				},
+
+				clear : function() {
+					this.elements.stack.value = '';
+					this.elements.sp.value = '';
+					this.elements.ip.value = '';
+				},
+
+				apply : function() {
+					CPU.stack = this.elements.stack.value.trim().split(' ').map(x => parseInt(x, 16));
+					CPU.sp = parseInt(this.elements.sp.value, 10);
+					CPU.ip = parseInt(this.elements.ip.value, 10);
+				}
+			};
+			const modal = new bootstrap.Modal(state_edit.elements.modal);
+			state_edit.elements.modal.addEventListener('show.bs.modal', event => {
+				state_edit.populate();
+			});
+			state_edit.elements.modal.addEventListener('hide.bs.modal', event => {
+				state_edit.clear();
+			});
+			state_edit.elements.apply.addEventListener('click', event => {
+				state_edit.apply();
+				monitorStatus();
+				modal.hide();
+			});
+
 		</script>
+
 	</body>
 </html>
